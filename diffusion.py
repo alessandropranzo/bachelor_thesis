@@ -1,9 +1,3 @@
-# THIS MODULE HAS DEPRECATED, DELETE ASAP (after diffusion.py and diffusion_reaction.py are done)
-
-
-
-
-
 import torch
 from torch import nn
 from torch.func import functional_call, grad, vmap
@@ -13,7 +7,7 @@ from typing import Callable
 
 from utils import tuple_2_dict
 
-class LinearNN(nn.Module):
+class DiffusionNN(nn.Module):
     
     def __init__(self, layers: list = [2, 5, 5, 5, 5, 1], act: nn.Module = nn.Tanh) -> None:
         super().__init__()
@@ -45,7 +39,7 @@ class LinearNN(nn.Module):
         return out
     
 
-def _make_forward_fn(model: nn.Module):
+def make_forward_fn(model: nn.Module):
 
     def fn(x: torch.Tensor, t: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
         if isinstance(params, tuple):
@@ -55,13 +49,29 @@ def _make_forward_fn(model: nn.Module):
 
         return functional_call(model, params_dict, (x, t)) 
     
-    #Implement here the code to retrieve the gradients ?
     return fn
 
+
 #Function needed to recover the loss function for the diffusion problem
-def make_diffusion_loss() -> Callable:
+def make_diffusion_loss(f: Callable) -> Callable:
     
-    def diffusion_loss():
+    #First derivative with respect to time t
+    dudt = grad(f, 1)
+
+    #First derivative with respect to position x
+    dudx = grad(f, 0)
+    #Second derivative with respect to position x
+    d2udx2 = grad(dudx, 0)
+
+    def diffusion_loss(x: torch.Tensor, t: torch.Tensor, params: torch.Tensor):
+        #MSE error
+
+        #MSE on interior
+
+        #MSE on boundary
+
+        #Add all the losses and return their values 
         pass
     
-    return None
+
+    return diffusion_loss

@@ -6,6 +6,7 @@ from collections import OrderedDict
 from typing import Callable
 
 from utils import tuple_2_dict
+from pdes import diffusion
 
 class DiffusionNN(nn.Module):
     
@@ -52,26 +53,40 @@ def make_forward_fn(model: nn.Module):
     return fn
 
 
-#Function needed to recover the loss function for the diffusion problem
-def make_diffusion_loss(f: Callable) -> Callable:
-    
+#   USE VMAP ON THE GRADIENTS TO SUPPORT BATCHING and define the in_dim parameter
+def make_diffusion_loss(u: Callable) -> Callable:
     #First derivative with respect to time t
-    dudt = grad(f, 1)
-
+    dudt = grad(u, 1)
+    dudt = vmap(dudt)
     #First derivative with respect to position x
-    dudx = grad(f, 0)
+    dudx = grad(u, 0)
     #Second derivative with respect to position x
     d2udx2 = grad(dudx, 0)
+    d2udx2 = vmap(d2udx2)
 
+    #Here data loss and physics loss, share the same inputs, while 
     def diffusion_loss(x: torch.Tensor, t: torch.Tensor, params: torch.Tensor):
-        #MSE error
+        loss = nn.MSELoss()
 
-        #MSE on interior
+        #Data Loss DO WE NEED THIS OR NOT?????????????????????????????????????????????????????????
+        u_value = u(x, t, params)
+        real_value = diffusion(x, t)
+        data_loss = loss(u_value, real_value)
 
-        #MSE on boundary
+        #Physics Loss
+        f_value = dudt(x, t, params) - d2udx2(x, t, params) - torch.exp(-t) * (- torch.sin(torch.pi * x) + torch.pi**2 * torch.sin(torch.pi * x))
+        phy_loss = loss(f_value , torch.zeros_like(f_value))
+
+        #Boundary Losses
+        bound1_t_0 = torch.zeros_like(x)
+        bound2_x_0 = torch.ones_like(t)
+        bound3_x_0 = - bound2_x_0
+
+        bound1_loss = loss(u(x, bound1_t_0, params), torch.sin(torch.pi * x)) #u(x,0) = sin(pi*x)
+        bound2_loss = loss(u(bound2_x_0, t), torch.zeros_like(t)) #u(1, t) = 0
+        bound3_loss = loss(u(bound3_x_0, t), torch.zeros_like(t)) #u(-1, t) = 0
 
         #Add all the losses and return their values 
-        pass
+        return data_loss + phy_loss + bound1_loss + bound2_loss + bound3_loss
     
-
     return diffusion_loss

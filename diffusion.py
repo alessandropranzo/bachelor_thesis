@@ -29,7 +29,9 @@ class DiffusionNN(nn.Module):
             )
 
         #Appending the last layer without the activation function
-        layer_list.append("layer_%d" % (self.depth - 1), nn.Linear(layers[-2], layers[-1]))
+        layer_list.append(
+            ("layer_%d" % (self.depth - 1), nn.Linear(layers[-2], layers[-1]))
+        )
 
         layer_dict = OrderedDict(layer_list)
 
@@ -41,50 +43,58 @@ class DiffusionNN(nn.Module):
     
 
 def make_forward_fn(model: nn.Module):
-
-    def fn(x: torch.Tensor, t: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
+    #Here x and t are stacked on the same tensor
+    def u(x_t: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
         if isinstance(params, tuple):
             params_dict = tuple_2_dict(model, params)
         else:
             params_dict = params  
 
-        return functional_call(model, params_dict, (x, t)) 
+        return functional_call(model, params_dict, (x_t, )).squeeze() 
     
-    return fn
+    return u
 
 
 #   USE VMAP ON THE GRADIENTS TO SUPPORT BATCHING and define the in_dim parameter
 def make_diffusion_loss(u: Callable) -> Callable:
-    #First derivative with respect to time t
-    dudt = grad(u, 1)
-    dudt = vmap(dudt)
-    #First derivative with respect to position x
-    dudx = grad(u, 0)
-    #Second derivative with respect to position x
-    d2udx2 = grad(dudx, 0)
-    d2udx2 = vmap(d2udx2)
+    #Gradient of the function
+    grad_u = grad(u, 0)
+    grad_u = vmap(grad_u)
+
+    #Defining the first derivative w.r.t. t
+    def dudt(x_t: torch.Tensor, params: torch.Tensor):
+        return vmap(grad_u, in_dims=(0, None))(x_t, params)[:, 1:].squeeze()
+    
+    #Defining the second derivative w.r.t. x
+    def d2udx2(x_t: torch.Tensor, params: torch.Tensor):
+        #Defining the first derivative w.r.t. x
+        def dudx(x_t: torch.Tensor, params: torch.Tensor):
+            return vmap(grad_u, in_dims=(0, None))(x_t, params)[:, :1].squeeze()
+        
+        return vmap(grad(dudx), in_dims=(0, None))(x_t, params)[:, :1].squeeze()
 
     #Here data loss and physics loss, share the same inputs, while 
     def diffusion_loss(x: torch.Tensor, t: torch.Tensor, params: torch.Tensor):
-        loss = nn.MSELoss()
+        x_t = torch.stack((x, t), dim = 1)
 
+        loss = nn.MSELoss()
         #Data Loss DO WE NEED THIS OR NOT?????????????????????????????????????????????????????????
-        u_value = u(x, t, params)
+        u_value = u(x_t, params)
         real_value = diffusion(x, t)
         data_loss = loss(u_value, real_value)
 
         #Physics Loss
-        f_value = dudt(x, t, params) - d2udx2(x, t, params) - torch.exp(-t) * (- torch.sin(torch.pi * x) + torch.pi**2 * torch.sin(torch.pi * x))
+        f_value = dudt(x_t, params) - d2udx2(x_t, params) - torch.exp(-t) * (- torch.sin(torch.pi * x) + torch.pi**2 * torch.sin(torch.pi * x))
         phy_loss = loss(f_value , torch.zeros_like(f_value))
 
         #Boundary Losses
-        bound1_t_0 = torch.zeros_like(x)
-        bound2_x_0 = torch.ones_like(t)
-        bound3_x_0 = - bound2_x_0
+        bound1_x_t = torch.stack((x, torch.zeros_like(x)), dim = 1)
+        bound2_x_t = torch.stack((torch.ones_like(t), t), dim = 1)
+        bound3_x_t = torch.stack((- torch.ones_like(t), t), dim = 1)
 
-        bound1_loss = loss(u(x, bound1_t_0, params), torch.sin(torch.pi * x)) #u(x,0) = sin(pi*x)
-        bound2_loss = loss(u(bound2_x_0, t), torch.zeros_like(t)) #u(1, t) = 0
-        bound3_loss = loss(u(bound3_x_0, t), torch.zeros_like(t)) #u(-1, t) = 0
+        bound1_loss = loss(u(bound1_x_t, params), torch.sin(torch.pi * x)) #u(x,0) = sin(pi*x)
+        bound2_loss = loss(u(bound2_x_t, params), torch.zeros_like(t)) #u(1, t) = 0
+        bound3_loss = loss(u(bound3_x_t, params), torch.zeros_like(t)) #u(-1, t) = 0
 
         #Add all the losses and return their values 
         return data_loss + phy_loss + bound1_loss + bound2_loss + bound3_loss

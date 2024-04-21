@@ -6,7 +6,7 @@ from collections import OrderedDict
 from typing import Callable
 
 from utils import tuple_2_dict
-from pdes import inversed_diffusion_reaction
+from pdes import inversed_k, inversed_u
 
 class DiffReactNN(nn.Module):
     
@@ -29,7 +29,9 @@ class DiffReactNN(nn.Module):
             )
 
         #Appending the last layer without the activation function
-        layer_list.append("layer_%d" % (self.depth - 1), nn.Linear(layers[-2], layers[-1]))
+        layer_list.append(
+            ("layer_%d" % (self.depth - 1), nn.Linear(layers[-2], layers[-1]))
+        )
 
         layer_dict = OrderedDict(layer_list)
 
@@ -40,7 +42,7 @@ class DiffReactNN(nn.Module):
         return out
     
 
-def make_inverse_fn(model: nn.Module):
+def make_fwd_inv_fn(model: nn.Module):
 
     def fn(x: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
         if isinstance(params, tuple):
@@ -48,6 +50,27 @@ def make_inverse_fn(model: nn.Module):
         else:
             params_dict = params  
 
-        return functional_call(model, params_dict, (x)) 
+        return functional_call(model, params_dict, (x, ))
     
-    return fn
+    #This is the standard forward function
+    def u(x: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
+        if isinstance(params, tuple):
+            params_dict = tuple_2_dict(model, params)
+        else:
+            params_dict = params  
+
+        return functional_call(model, params_dict, (x, ))[:, :1].squeeze() #Take the first entry
+    
+    #This is the target inverse function (related to the raction coefficient)
+    def k(x: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
+        if isinstance(params, tuple):
+            params_dict = tuple_2_dict(model, params)
+        else:
+            params_dict = params  
+
+        return functional_call(model, params_dict, (x, ))[:, 1:].squeeze() #Take the second entry
+    
+    return fn, u, k
+
+def make_diff_react_loss(u: Callable, k: Callable) -> Callable:
+    pass

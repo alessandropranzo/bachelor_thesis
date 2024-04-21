@@ -58,8 +58,7 @@ def make_forward_fn(model: nn.Module):
 #   USE VMAP ON THE GRADIENTS TO SUPPORT BATCHING and define the in_dim parameter
 def make_diffusion_loss(u: Callable) -> Callable:
     #Gradient of the function
-    grad_u = grad(u, 0)
-    grad_u = vmap(grad_u)
+    grad_u = grad(u)
 
     #Defining the first derivative w.r.t. t
     def dudt(x_t: torch.Tensor, params: torch.Tensor):
@@ -67,14 +66,13 @@ def make_diffusion_loss(u: Callable) -> Callable:
     
     #Defining the second derivative w.r.t. x
     def d2udx2(x_t: torch.Tensor, params: torch.Tensor):
-        #Defining the first derivative w.r.t. x
+        #Defining the first derivative w.r.t. x (note that it is not vmapped since it will be used by the second derivative)
         def dudx(x_t: torch.Tensor, params: torch.Tensor):
-            return vmap(grad_u, in_dims=(0, None))(x_t, params)[:, :1].squeeze()
-        
+            return grad_u(x_t, params)[0]
         return vmap(grad(dudx), in_dims=(0, None))(x_t, params)[:, :1].squeeze()
 
-    #Here data loss and physics loss, share the same inputs, while 
-    def diffusion_loss(x: torch.Tensor, t: torch.Tensor, params: torch.Tensor):
+    #Here data loss and physics loss, share the same inputs, while the boundary loss is adjusted to the boundary conditions 
+    def diffusion_loss(x:torch.Tensor, t: torch.Tensor, params: torch.Tensor):
         x_t = torch.stack((x, t), dim = 1)
 
         loss = nn.MSELoss()

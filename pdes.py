@@ -27,7 +27,7 @@ def inversed_k(x: torch.Tensor):
     out = a + torch.exp(b * (num/den))
     return out
 
-
+#Check this out before submitting the code.
 def inversed_u(x: torch.Tensor):
     """Returns the integrated solution to u(x) in the diffusion reacttion problem identified by 0.01 * d2u/d2x - k(x)u = sin(2*pi*x).
 

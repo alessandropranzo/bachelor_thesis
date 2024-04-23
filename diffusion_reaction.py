@@ -73,4 +73,25 @@ def make_fwd_inv_fn(model: nn.Module):
     return fn, u, k
 
 def make_diff_react_loss(u: Callable, k: Callable) -> Callable:
-    pass
+
+    grad_u = grad(u)
+
+    #Check this!!!!
+    def d2udx2(x: torch.Tensor, params: torch.Tensor):
+        #Defining the first derivative w.r.t. x (note that it is not vmapped since it will be used by the second derivative)
+        def dudx(x: torch.Tensor, params: torch.Tensor):
+            return grad_u(x, params)
+        return vmap(grad(dudx), in_dims=(0, None))(x, params).squeeze()
+    
+    def diff_react_loss(x: torch.Tensor, params: torch.Tensor):
+        loss = nn.MSELoss()
+
+        #Data Loss
+
+        #Physics Loss
+
+        #Boundary Loss ????
+
+        pass
+
+    return diff_react_loss

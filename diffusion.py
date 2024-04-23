@@ -55,7 +55,6 @@ def make_forward_fn(model: nn.Module):
     return u
 
 
-#   USE VMAP ON THE GRADIENTS TO SUPPORT BATCHING and define the in_dim parameter
 def make_diffusion_loss(u: Callable) -> Callable:
     #Gradient of the function
     grad_u = grad(u)
@@ -76,7 +75,7 @@ def make_diffusion_loss(u: Callable) -> Callable:
         x_t = torch.stack((x, t), dim = 1)
 
         loss = nn.MSELoss()
-        #Data Loss DO WE NEED THIS OR NOT?????????????????????????????????????????????????????????
+        #Data Loss
         u_value = u(x_t, params)
         real_value = diffusion(x, t)
         data_loss = loss(u_value, real_value)

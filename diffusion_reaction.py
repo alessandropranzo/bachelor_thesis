@@ -50,48 +50,42 @@ def make_fwd_inv_fn(model: nn.Module):
         else:
             params_dict = params  
 
-        return functional_call(model, params_dict, (x, ))
+        return functional_call(model, params_dict, (x, )).squeeze()
+    
+    return fn
+
+def make_diff_react_loss(fn: Callable) -> Callable:
     
     #This is the standard forward function
     def u(x: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
-        if isinstance(params, tuple):
-            params_dict = tuple_2_dict(model, params)
-        else:
-            params_dict = params  
-
-        return functional_call(model, params_dict, (x, ))[:, :1].squeeze() #Take the first entry
+        return fn(x, params)[:, 0].squeeze() #Take the first entry
     
     #This is the target inverse function (related to the raction coefficient)
     def k(x: torch.Tensor, params: dict[str, nn.Parameter] | tuple[nn.Parameter]) -> Callable:
-        if isinstance(params, tuple):
-            params_dict = tuple_2_dict(model, params)
-        else:
-            params_dict = params  
-
-        return functional_call(model, params_dict, (x, ))[:, 1:].squeeze() #Take the second entry
+        return fn(x, params)[:, 1].squeeze() #Take the second entry
     
-    return fn, u, k
-
-def make_diff_react_loss(u: Callable, k: Callable) -> Callable:
-
-    grad_u = grad(u)
-
-    #Check this!!!!
+    #Defining the second derivative w.r.t. x
     def d2udx2(x: torch.Tensor, params: torch.Tensor):
+        #Let's define the differentiable part of the the function u(x)
+        def u_diff(x, params):
+            return fn(x, params)[0]
         #Defining the first derivative w.r.t. x (note that it is not vmapped since it will be used by the second derivative)
         def dudx(x: torch.Tensor, params: torch.Tensor):
-            return grad_u(x, params)
+            return grad(u_diff)(x, params).squeeze()
         return vmap(grad(dudx), in_dims=(0, None))(x, params).squeeze()
     
     def diff_react_loss(x: torch.Tensor, params: torch.Tensor):
         loss = nn.MSELoss()
-
-        #Data Loss
-
-        #Physics Loss
-
-        #Boundary Loss ????
-
-        pass
+        #Data Loss !!!!!!! Not sure that k is needed here, shouldn't we learn starting from some values?
+        u_value = u(x, params)
+        real_u_value = inversed_u(x)
+        k_value = k(x, params)
+        real_k_value = inversed_k(x)
+        data_loss = loss(u_value, real_u_value) + loss(k_value, real_k_value)
+        #Physics Loss (here lambda = 0.01)
+        f_value = torch.sin(2 * torch.pi * x).squeeze() + k(x, params) * u(x, params) - 0.01 * d2udx2(x, params)
+        physics_loss = loss(f_value, torch.zeros_like(f_value))
+        #Please notice that here we do not care about the boundary loss because we are focusing on the inverse problem????
+        return data_loss + physics_loss
 
     return diff_react_loss

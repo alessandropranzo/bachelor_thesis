@@ -20,12 +20,12 @@ def inversed_k(x: torch.Tensor):
         Inputs:
         - x: torch.Tensor = the position varible
     """
-    a = torch.Tensor(0.1)
-    b = torch.Tensor(-0.5)
+    a = 0.1
+    b = -0.5
     num = (x + b)**2
-    den = (torch.Tensor(0.15))**2
+    den = (0.15)**2
     out = a + torch.exp(b * (num/den))
-    return out
+    return out.float().squeeze()
 
 #Check this out before submitting the code.
 def inversed_u(x: torch.Tensor):
@@ -50,4 +50,4 @@ def inversed_u(x: torch.Tensor):
 
     res = solve_bvp(func, bc, a, b)
     solution = res.sol(x)[0]
-    return torch.from_numpy(solution)
+    return torch.from_numpy(solution).float().squeeze()

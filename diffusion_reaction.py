@@ -85,7 +85,6 @@ def make_diff_react_loss(fn: Callable) -> Callable:
         #Physics Loss (here lambda = 0.01)
         f_value = torch.sin(2 * torch.pi * x).squeeze() + k(x, params) * u(x, params) - 0.01 * d2udx2(x, params)
         physics_loss = loss(f_value, torch.zeros_like(f_value))
-        #Please notice that here we do not care about the boundary loss because we are focusing on the inverse problem????
         return data_loss + physics_loss
 
     return diff_react_loss

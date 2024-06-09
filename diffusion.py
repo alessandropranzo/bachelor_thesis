@@ -81,7 +81,7 @@ def make_diffusion_loss(u: Callable) -> Callable:
         data_loss = loss(u_value, real_value)
 
         #Physics Loss
-        f_value = dudt(x_t, params) - d2udx2(x_t, params) - torch.exp(-t) * (- torch.sin(torch.pi * x) + torch.pi**2 * torch.sin(torch.pi * x))
+        f_value = dudt(x_t, params) - d2udx2(x_t, params) - torch.exp(-t) * (- torch.sin(torch.pi * x) + (torch.pi**2) * torch.sin(torch.pi * x))
         phy_loss = loss(f_value , torch.zeros_like(f_value))
 
         #Boundary Losses
@@ -94,6 +94,6 @@ def make_diffusion_loss(u: Callable) -> Callable:
         bound3_loss = loss(u(bound3_x_t, params), torch.zeros_like(t)) #u(-1, t) = 0
 
         #Add all the losses and return their values 
-        return data_loss + phy_loss + bound1_loss + bound2_loss + bound3_loss
+        return data_loss + 100 * phy_loss + 200 * bound1_loss + 200 * bound2_loss + 200 * bound3_loss
     
     return diffusion_loss
